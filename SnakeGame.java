@@ -50,6 +50,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
     int currentProduct;    // Produto atual (começa em 1)
     int score;             // Pontuação do jogador
     int lives;             // Vidas do jogador
+    ArrayList<Integer> eatenFactors; // Fatores ingeridos desde o último reset
     
     //game logic
     int velocityX;
@@ -84,6 +85,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         currentProduct = 1;
         score = 0;
         lives = 3;
+        eatenFactors = new ArrayList<>();
         generateNewTarget();
         placeFoods();
 
@@ -277,23 +279,26 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
             if (currentProduct > 1) {
                 g2d.setColor(new Color(200, 200, 200));
                 g2d.setFont(new Font("Monospaced", Font.PLAIN, 12));
-                g2d.drawString("Próximo fator ideal: " + findNextFactor(), 200, hudY + 50);
+                g2d.drawString(buildMultiplicationHint(), 200, hudY + 50);
             }
         }
     }
-    
-    private String findNextFactor() {
-        if (currentProduct >= targetNumber) return "RESET";
-        
-        // Encontrar próximo fator que divida o alvo pelo produto atual
-        int remaining = targetNumber / currentProduct;
-        
-        for (int i = 2; i <= 9; i++) {
-            if (remaining % i == 0) {
-                return String.valueOf(i);
+
+    private String buildMultiplicationHint() {
+        StringBuilder hint = new StringBuilder();
+
+        if (eatenFactors.isEmpty()) {
+            hint.append("?");
+        } else {
+            for (int i = 0; i < eatenFactors.size(); i++) {
+                if (i > 0) hint.append(" x ");
+                hint.append(eatenFactors.get(i));
             }
+            hint.append(" x ?");
         }
-        return "?";
+
+        hint.append(" = ").append(targetNumber);
+        return hint.toString();
     }
 
     /**
@@ -453,6 +458,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
                 // VITÓRIA! Produto igual ao alvo
                 currentProduct = 1;
                 score += 10 + (snakeBody.size() * 2);
+                eatenFactors.clear();
                 
                 // Cobra cresce
                 snakeBody.add(new Tile(eatenFood.position.x, eatenFood.position.y));
@@ -470,6 +476,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
                 // PENALIDADE! Ultrapassou o alvo OU não é divisor do alvo
                 currentProduct = 1;
                 lives--;
+                eatenFactors.clear();
                 
                 // Diminuir cobra (remover últimos 2 segmentos)
                 if (snakeBody.size() > 0) {
@@ -494,6 +501,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
             } else {
                 // Produto válido e menor que o alvo
                 currentProduct = newProduct;
+                eatenFactors.add(eatenFood.number);
                 
                 // Cobra cresce um pouco
                 snakeBody.add(new Tile(eatenFood.position.x, eatenFood.position.y));
@@ -616,6 +624,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         currentProduct = 1;
         score = 0;
         lives = 3;
+        eatenFactors.clear();
         
         // Resetar movimento
         velocityX = 1;
