@@ -46,14 +46,16 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
     Random random;
 
     //math game logic
-    int targetNumber;      // Número alvo a ser alcançado
-    int currentResult;     // Resultado atual da operação (começa variando por operador)
+    int targetNumber;      // Resultado da equação
     int score;             // Pontuação do jogador
     int lives;             // Vidas do jogador
     int level;             // Nível atual do jogador
     int targetScore;       // Pontos necessários para próximo nível
     String currentOperator; // Operador atual: "+", "-", "x", "÷"
-    ArrayList<Integer> eatenNumbers; // Números ingeridos desde o último reset
+    int operandA;           // Operando esquerdo (pode estar faltando)
+    int operandB;           // Operando direito (pode estar faltando)
+    int missingValue;       // Valor faltante que o jogador deve encontrar
+    boolean missingLeft;    // true = falta o operando esquerdo, false = falta o direito
     boolean levelUpFlash = false; // Flash verde de level up
     int levelUpFlashCounter = 0;   // Contador para flash de level up
     
@@ -90,10 +92,8 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         level = 1;
         targetScore = 30; // Pontos necessários para nível 2
         currentOperator = "+"; // Começar com adição
-        currentResult = 0;
         score = 0;
         lives = 3;
-        eatenNumbers = new ArrayList<>();
         generateNewTarget();
         placeFoods();
 
@@ -296,7 +296,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
             g2d.drawString("PONTOS: " + score + "/" + targetScore, 350, hudY);
             
             // Linha 2: Equação matemática GRANDE e COLORIDA
-            g2d.setFont(new Font("Monospaced", Font.BOLD, 24));
+            g2d.setFont(new Font("Monospaced", Font.BOLD, 30));
             String equation = buildEquationHint();
             g2d.setColor(new Color(0, 255, 255));
             g2d.drawString(equation, 20, hudY + 50);
@@ -310,66 +310,90 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
     }
 
     private String buildEquationHint() {
-        StringBuilder hint = new StringBuilder();
-
-        if (eatenNumbers.isEmpty()) {
-            hint.append("?");
-        } else {
-            for (int i = 0; i < eatenNumbers.size(); i++) {
-                if (i > 0) hint.append(" ").append(currentOperator).append(" ");
-                hint.append(eatenNumbers.get(i));
-            }
-            hint.append(" ").append(currentOperator).append(" ?");
-        }
-
-        hint.append(" = ").append(targetNumber);
-        return hint.toString();
+        String left = missingLeft ? "?" : String.valueOf(operandA);
+        String right = missingLeft ? String.valueOf(operandB) : "?";
+        return left + " " + currentOperator + " " + right + " = " + targetNumber;
     }
     
     private String getAvailableOperators() {
         if (level <= 3) {
-            return "Operadores disponíveis: +";
+            return "Operadores disponíveis: + e -";
         } else {
-            return "Operadores disponíveis: + e x";
+            return "Operadores disponíveis: +, -, x e ÷";
         }
     }
     
     private int getGameSpeed() {
         if (level <= 3) {
             return 150; // Mais lento nos primeiros 3 níveis
-        } else if (level <= 6) {
-            return 120; // Velocidade média
-        } else {
-            return 100; // Velocidade normal
         }
+        return 120; // Aumenta um pouco após os níveis iniciais
     }
 
     /**
-     * Gera um novo número alvo e escolhe um operador baseado no nível
+     * Gera uma nova equação com número faltante baseado no nível
      */
     public void generateNewTarget() {
-        // Níveis 1-2: apenas +
-        if (level <= 2) {
-            currentOperator = "+";
+        String[] ops = (level <= 3) ? new String[]{"+", "-"} : new String[]{"+", "-", "x", "÷"};
+        currentOperator = ops[random.nextInt(ops.length)];
+
+        int maxSmall = 10;
+        int maxMedium = 20;
+
+        if ("÷".equals(currentOperator)) {
+            // Em divisão, manter o número faltante pequeno: sempre falta o divisor
+            missingLeft = false;
         } else {
-            // Nível 3+: + e x
-            String[] ops = {"+", "x"};
-            currentOperator = ops[random.nextInt(ops.length)];
+            missingLeft = random.nextBoolean();
         }
-        
-        // Gerar alvo baseado no operador
+
         switch (currentOperator) {
             case "+":
-                targetNumber = 10 + random.nextInt(41); // 10 a 50
-                currentResult = 0;
+                if (missingLeft) {
+                    operandB = 1 + random.nextInt(maxMedium);
+                    missingValue = 1 + random.nextInt(maxMedium);
+                    operandA = missingValue;
+                    targetNumber = operandA + operandB;
+                } else {
+                    operandA = 1 + random.nextInt(maxMedium);
+                    missingValue = 1 + random.nextInt(maxMedium);
+                    operandB = missingValue;
+                    targetNumber = operandA + operandB;
+                }
+                break;
+            case "-":
+                if (missingLeft) {
+                    operandB = 1 + random.nextInt(maxMedium);
+                    missingValue = operandB + random.nextInt(maxMedium - operandB + 1);
+                    operandA = missingValue;
+                    targetNumber = operandA - operandB;
+                } else {
+                    operandA = 1 + random.nextInt(maxMedium);
+                    missingValue = 1 + random.nextInt(operandA);
+                    operandB = missingValue;
+                    targetNumber = operandA - operandB;
+                }
                 break;
             case "x":
-                int[] possibleProducts = {
-                    12, 15, 18, 20, 24, 28, 30, 32, 36, 40, 
-                    42, 45, 48, 54, 56, 60, 63, 64, 72, 80
-                };
-                targetNumber = possibleProducts[random.nextInt(possibleProducts.length)];
-                currentResult = 1;
+                if (missingLeft) {
+                    operandB = 1 + random.nextInt(maxSmall);
+                    missingValue = 1 + random.nextInt(maxSmall);
+                    operandA = missingValue;
+                    targetNumber = operandA * operandB;
+                } else {
+                    operandA = 1 + random.nextInt(maxSmall);
+                    missingValue = 1 + random.nextInt(maxSmall);
+                    operandB = missingValue;
+                    targetNumber = operandA * operandB;
+                }
+                break;
+            case "÷":
+                // Equação: dividend ÷ ? = result
+                missingValue = 1 + random.nextInt(maxSmall); // divisor
+                int result = 1 + random.nextInt(maxSmall);
+                operandA = missingValue * result; // dividend
+                operandB = missingValue;
+                targetNumber = result;
                 break;
         }
     }
@@ -403,45 +427,12 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
     
     private List<Integer> getNecessaryNumbers() {
         List<Integer> numbers = new ArrayList<>();
-        
-        switch (currentOperator) {
-            case "+":
-                int remaining = targetNumber - currentResult;
-                for (int i = 1; i <= 9 && i <= remaining; i++) {
-                    numbers.add(i);
-                }
-                break;
-            case "x":
-                return getFactors(targetNumber / currentResult);
-        }
-        
+        numbers.add(missingValue);
         return numbers;
     }
     
     private int getRandomNumberForOperator() {
-        switch (currentOperator) {
-            case "+":
-                return 1 + random.nextInt(9); // 1 a 9
-            case "x":
-                return 2 + random.nextInt(8); // 2 a 9
-            default:
-                return 2 + random.nextInt(8);
-        }
-    }
-    
-    /**
-     * Obtém todos os fatores de um número entre 2 e 9
-     */
-    private List<Integer> getFactors(int number) {
-        List<Integer> factors = new ArrayList<>();
-        
-        for (int i = 2; i <= 9 && i <= number; i++) {
-            if (number % i == 0) {
-                factors.add(i);
-            }
-        }
-        
-        return factors;
+        return 1 + random.nextInt(20); // 1 a 20
     }
     
     /**
@@ -536,66 +527,32 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         }
         
         if (eatenFood != null) {
-            int newResult = calculateNewResult(currentResult, eatenFood.number, currentOperator);
-            boolean isCorrect = false;
-            boolean isValidMove = false;
-            
-            // LÓGICA MATEMÁTICA para cada operador
-            switch (currentOperator) {
-                case "+":
-                    if (newResult == targetNumber) {
-                        isCorrect = true;
-                    } else if (newResult < targetNumber) {
-                        isValidMove = true;
-                    }
-                    break;
-                case "x":
-                    if (newResult == targetNumber) {
-                        isCorrect = true;
-                    } else if (newResult < targetNumber && targetNumber % newResult == 0) {
-                        isValidMove = true;
-                    }
-                    break;
-            }
-            
+            boolean isCorrect = eatenFood.number == missingValue;
+
             if (isCorrect) {
-                // VITÓRIA! Alcançou o alvo
+                // VITÓRIA! Acertou o número faltante
                 score += 10 + (snakeBody.size() * 2);
-                eatenNumbers.clear();
-                
-                // Cobra cresce
-                snakeBody.add(new Tile(eatenFood.position.x, eatenFood.position.y));
-                
+
+                // Cobra cresce somente ao acertar
+                addSnakeSegment(eatenFood.position.x, eatenFood.position.y);
+
                 // Verificar mudança de nível
                 if (score >= targetScore) {
                     levelUp();
                 }
-                
-                // Gerar novo alvo
+
+                // Gerar nova equação
                 generateNewTarget();
                 placeFoods();
-                
+
                 // Efeito visual de sucesso
                 victoryFlash = true;
                 penaltyFlash = false;
                 flashCounter = 10;
-                
-            } else if (isValidMove) {
-                // Movimento válido, mas não alcançou o alvo ainda
-                currentResult = newResult;
-                eatenNumbers.add(eatenFood.number);
-                
-                // Cobra cresce um pouco
-                snakeBody.add(new Tile(eatenFood.position.x, eatenFood.position.y));
-                
-                // Regenerar frutas
-                placeFoods();
-                
             } else {
-                // PENALIDADE! Movimento inválido
+                // PENALIDADE! Número incorreto
                 lives--;
-                eatenNumbers.clear();
-                
+
                 // Diminuir cobra (remover últimos 2 segmentos)
                 if (snakeBody.size() > 0) {
                     snakeBody.remove(snakeBody.size() - 1);
@@ -603,21 +560,21 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
                 if (snakeBody.size() > 0) {
                     snakeBody.remove(snakeBody.size() - 1);
                 }
-                
+
                 // Efeito visual de penalidade
                 penaltyFlash = true;
                 flashCounter = 10;
-                
-                // Regenerar alvo e frutas
+
+                // Regenerar equação e frutas
                 generateNewTarget();
                 placeFoods();
-                
+
                 // Game over se ficar sem vidas
                 if (lives <= 0) {
                     gameOver = true;
                 }
             }
-            
+
             // Remover a fruta comida
             foods.remove(eatenFood);
         }
@@ -681,17 +638,6 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         }
     }
     
-    private int calculateNewResult(int current, int number, String operator) {
-        switch (operator) {
-            case "+":
-                return current + number;
-            case "x":
-                return current * number;
-            default:
-                return current;
-        }
-    }
-    
     private void levelUp() {
         level++;
         targetScore = score + 30; // Próximo nível requer mais 30 pontos
@@ -702,6 +648,13 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         // Efeito visual de mudança de nível - flash verde prolongado
         levelUpFlash = true;
         levelUpFlashCounter = 30; // Flash mais longo que vitória normal
+
+        // Crescimento bônus ao passar de nível
+        addSnakeSegment(snakeHead.x, snakeHead.y);
+    }
+
+    private void addSnakeSegment(int x, int y) {
+        snakeBody.add(new Tile(x, y));
     }
 
     public boolean collision(Tile tile1, Tile tile2) {
@@ -763,10 +716,8 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         level = 1;
         targetScore = 30;
         currentOperator = "+";
-        currentResult = 0;
         score = 0;
         lives = 3;
-        eatenNumbers.clear();
         
         // Resetar movimento
         velocityX = 1;
