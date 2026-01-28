@@ -47,10 +47,15 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
 
     //math game logic
     int targetNumber;      // Número alvo a ser alcançado
-    int currentProduct;    // Produto atual (começa em 1)
+    int currentResult;     // Resultado atual da operação (começa variando por operador)
     int score;             // Pontuação do jogador
     int lives;             // Vidas do jogador
-    ArrayList<Integer> eatenFactors; // Fatores ingeridos desde o último reset
+    int level;             // Nível atual do jogador
+    int targetScore;       // Pontos necessários para próximo nível
+    String currentOperator; // Operador atual: "+", "-", "x", "÷"
+    ArrayList<Integer> eatenNumbers; // Números ingeridos desde o último reset
+    boolean levelUpFlash = false; // Flash verde de level up
+    int levelUpFlashCounter = 0;   // Contador para flash de level up
     
     //game logic
     int velocityX;
@@ -82,10 +87,13 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         random = new Random();
         
         // Inicializar variáveis matemáticas
-        currentProduct = 1;
+        level = 1;
+        targetScore = 30; // Pontos necessários para nível 2
+        currentOperator = "+"; // Começar com adição
+        currentResult = 0;
         score = 0;
         lives = 3;
-        eatenFactors = new ArrayList<>();
+        eatenNumbers = new ArrayList<>();
         generateNewTarget();
         placeFoods();
 
@@ -95,8 +103,8 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         // Iniciar música de fundo
         playBackgroundMusic("sdtrack.wav");
         
-		//game timer
-		gameLoop = new Timer(100, this); //how long it takes to start timer, milliseconds gone between frames 
+		//game timer (velocidade ajustável por nível)
+		gameLoop = new Timer(getGameSpeed(), this);
         gameLoop.start();
 	}	
     
@@ -163,6 +171,26 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
             if (alpha < 0) alpha = 0;
             g2d.setColor(new Color(0, 180, 0, alpha));
             g2d.fillRect(0, 0, boardWidth, boardHeight);
+        }
+        
+        // Efeito de flash verde mais intenso para level up
+        if (levelUpFlash && levelUpFlashCounter > 0) {
+            int alpha = (int) (levelUpFlashCounter * 3); // 30 * 3 = 90 alpha máximo
+            if (alpha > 90) alpha = 90;
+            if (alpha < 0) alpha = 0;
+            g2d.setColor(new Color(0, 255, 0, alpha));
+            g2d.fillRect(0, 0, boardWidth, boardHeight);
+            
+            // Mensagem de level up
+            if (levelUpFlashCounter > 15) {
+                g2d.setColor(Color.WHITE);
+                g2d.setFont(new Font("Monospaced", Font.BOLD, 48));
+                String levelUpText = "NÍVEL " + level + "!";
+                FontMetrics fm = g2d.getFontMetrics();
+                int textX = (boardWidth - fm.stringWidth(levelUpText)) / 2;
+                int textY = boardHeight / 2;
+                g2d.drawString(levelUpText, textX, textY);
+            }
         }
         
         // Linha separadora entre HUD e área jogável
@@ -242,7 +270,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         
         // Borda decorativa
         g2d.setColor(new Color(0, 0, 0, 180));
-        g2d.fillRoundRect(10, 5, boardWidth - 20, 80, 15, 15);
+        g2d.fillRoundRect(10, 5, boardWidth - 20, 90, 15, 15);
         
         g2d.setFont(new Font("Monospaced", Font.BOLD, 18));
         
@@ -252,95 +280,152 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
             g2d.setFont(new Font("Monospaced", Font.BOLD, 14));
             g2d.setColor(Color.WHITE);
             g2d.drawString("Pontuação Final: " + score, 20, hudY + 25);
-            g2d.drawString("Pressione R para reiniciar", 20, hudY + 50);
-            g2d.drawString("Pressione ESC para voltar ao menu", 20, hudY + 70);
+            g2d.drawString("Nível Alcançado: " + level, 20, hudY + 45);
+            g2d.drawString("Pressione R para reiniciar", 20, hudY + 65);
+            g2d.drawString("Pressione ESC para voltar ao menu", 250, hudY + 65);
         } else {
-            // Alvo em amarelo neon
-            g2d.setColor(new Color(255, 255, 0));
-            g2d.drawString("ALVO: " + targetNumber, 20, hudY);
+            // Linha 1: Nível e vidas
+            g2d.setColor(new Color(255, 200, 0));
+            g2d.drawString("NÍVEL: " + level, 20, hudY);
             
-            // Produto atual em ciano neon
-            g2d.setColor(new Color(0, 255, 255));
-            g2d.drawString("ATUAL: " + currentProduct, 200, hudY);
-            
-            // Pontuação em verde neon
-            g2d.setColor(new Color(0, 255, 100));
-            g2d.drawString("PONTOS: " + score, 380, hudY);
-            
-            // Vidas em magenta
             g2d.setColor(new Color(255, 0, 255));
-            g2d.drawString("❤ " + lives, 20, hudY + 25);
+            g2d.drawString("❤ " + lives, 200, hudY);
             
-            // Tamanho da cobra
-            g2d.setColor(new Color(150, 150, 255));
-            g2d.drawString("Tamanho: " + (snakeBody.size() + 1), 20, hudY + 50);
+            // Pontuação e progresso
+            g2d.setColor(new Color(0, 255, 100));
+            g2d.drawString("PONTOS: " + score + "/" + targetScore, 350, hudY);
             
-            // Dica de multiplicação
-            if (currentProduct > 1) {
-                g2d.setColor(new Color(200, 200, 200));
-                g2d.setFont(new Font("Monospaced", Font.PLAIN, 12));
-                g2d.drawString(buildMultiplicationHint(), 200, hudY + 50);
-            }
+            // Linha 2: Equação matemática GRANDE e COLORIDA
+            g2d.setFont(new Font("Monospaced", Font.BOLD, 24));
+            String equation = buildEquationHint();
+            g2d.setColor(new Color(0, 255, 255));
+            g2d.drawString(equation, 20, hudY + 50);
+            
+            // Linha 3: Operadores disponíveis
+            g2d.setFont(new Font("Monospaced", Font.PLAIN, 14));
+            String availableOps = getAvailableOperators();
+            g2d.setColor(new Color(150, 150, 150));
+            g2d.drawString(availableOps, 20, hudY + 75);
         }
     }
 
-    private String buildMultiplicationHint() {
+    private String buildEquationHint() {
         StringBuilder hint = new StringBuilder();
 
-        if (eatenFactors.isEmpty()) {
+        if (eatenNumbers.isEmpty()) {
             hint.append("?");
         } else {
-            for (int i = 0; i < eatenFactors.size(); i++) {
-                if (i > 0) hint.append(" x ");
-                hint.append(eatenFactors.get(i));
+            for (int i = 0; i < eatenNumbers.size(); i++) {
+                if (i > 0) hint.append(" ").append(currentOperator).append(" ");
+                hint.append(eatenNumbers.get(i));
             }
-            hint.append(" x ?");
+            hint.append(" ").append(currentOperator).append(" ?");
         }
 
         hint.append(" = ").append(targetNumber);
         return hint.toString();
     }
+    
+    private String getAvailableOperators() {
+        if (level <= 3) {
+            return "Operadores disponíveis: +";
+        } else {
+            return "Operadores disponíveis: + e x";
+        }
+    }
+    
+    private int getGameSpeed() {
+        if (level <= 3) {
+            return 150; // Mais lento nos primeiros 3 níveis
+        } else if (level <= 6) {
+            return 120; // Velocidade média
+        } else {
+            return 100; // Velocidade normal
+        }
+    }
 
     /**
-     * Gera um novo número alvo baseado em multiplicação de fatores
-     * Garante que o alvo seja alcançável com números de 2 a 9
+     * Gera um novo número alvo e escolhe um operador baseado no nível
      */
     public void generateNewTarget() {
-        // Gerar alvos interessantes (produtos de 2-3 fatores)
-        int[] possibleTargets = {
-            12, 15, 18, 20, 24, 28, 30, 32, 36, 40, 
-            42, 45, 48, 54, 56, 60, 63, 64, 72, 80,
-            81, 84, 90, 96, 100, 108, 120, 144
-        };
+        // Níveis 1-2: apenas +
+        if (level <= 2) {
+            currentOperator = "+";
+        } else {
+            // Nível 3+: + e x
+            String[] ops = {"+", "x"};
+            currentOperator = ops[random.nextInt(ops.length)];
+        }
         
-        targetNumber = possibleTargets[random.nextInt(possibleTargets.length)];
+        // Gerar alvo baseado no operador
+        switch (currentOperator) {
+            case "+":
+                targetNumber = 10 + random.nextInt(41); // 10 a 50
+                currentResult = 0;
+                break;
+            case "x":
+                int[] possibleProducts = {
+                    12, 15, 18, 20, 24, 28, 30, 32, 36, 40, 
+                    42, 45, 48, 54, 56, 60, 63, 64, 72, 80
+                };
+                targetNumber = possibleProducts[random.nextInt(possibleProducts.length)];
+                currentResult = 1;
+                break;
+        }
     }
     
     /**
-     * Coloca múltiplas frutas na tela
-     * GARANTE que pelo menos alguns fatores necessários estejam presentes
+     * Coloca múltiplas frutas na tela com números apropriados para o operador atual
      */
     public void placeFoods() {
         foods.clear();
         
         int numberOfFoods = 6 + random.nextInt(4); // 6 a 9 frutas
         
-        // Obter fatores necessários para o alvo
-        List<Integer> necessaryFactors = getFactors(targetNumber / currentProduct);
+        // Obter números necessários baseado no operador
+        List<Integer> necessaryNumbers = getNecessaryNumbers();
         
-        // Garantir que pelo menos 2-3 fatores necessários apareçam
-        int factorsToPlace = Math.min(3, necessaryFactors.size());
-        for (int i = 0; i < factorsToPlace; i++) {
-            if (!necessaryFactors.isEmpty()) {
-                int factor = necessaryFactors.get(random.nextInt(necessaryFactors.size()));
-                placeFood(factor, true);
+        // Garantir que pelo menos 2-3 números necessários apareçam
+        int numbersToPlace = Math.min(3, necessaryNumbers.size());
+        for (int i = 0; i < numbersToPlace; i++) {
+            if (!necessaryNumbers.isEmpty()) {
+                int number = necessaryNumbers.get(random.nextInt(necessaryNumbers.size()));
+                placeFood(number, true);
             }
         }
         
         // Preencher com números aleatórios (distratores)
         while (foods.size() < numberOfFoods) {
-            int randomNum = 2 + random.nextInt(8); // 2 a 9
+            int randomNum = getRandomNumberForOperator();
             placeFood(randomNum, false);
+        }
+    }
+    
+    private List<Integer> getNecessaryNumbers() {
+        List<Integer> numbers = new ArrayList<>();
+        
+        switch (currentOperator) {
+            case "+":
+                int remaining = targetNumber - currentResult;
+                for (int i = 1; i <= 9 && i <= remaining; i++) {
+                    numbers.add(i);
+                }
+                break;
+            case "x":
+                return getFactors(targetNumber / currentResult);
+        }
+        
+        return numbers;
+    }
+    
+    private int getRandomNumberForOperator() {
+        switch (currentOperator) {
+            case "+":
+                return 1 + random.nextInt(9); // 1 a 9
+            case "x":
+                return 2 + random.nextInt(8); // 2 a 9
+            default:
+                return 2 + random.nextInt(8);
         }
     }
     
@@ -451,32 +536,65 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         }
         
         if (eatenFood != null) {
-            int newProduct = currentProduct * eatenFood.number;
+            int newResult = calculateNewResult(currentResult, eatenFood.number, currentOperator);
+            boolean isCorrect = false;
+            boolean isValidMove = false;
             
-            // LÓGICA MATEMÁTICA CRÍTICA
-            if (newProduct == targetNumber) {
-                // VITÓRIA! Produto igual ao alvo
-                currentProduct = 1;
+            // LÓGICA MATEMÁTICA para cada operador
+            switch (currentOperator) {
+                case "+":
+                    if (newResult == targetNumber) {
+                        isCorrect = true;
+                    } else if (newResult < targetNumber) {
+                        isValidMove = true;
+                    }
+                    break;
+                case "x":
+                    if (newResult == targetNumber) {
+                        isCorrect = true;
+                    } else if (newResult < targetNumber && targetNumber % newResult == 0) {
+                        isValidMove = true;
+                    }
+                    break;
+            }
+            
+            if (isCorrect) {
+                // VITÓRIA! Alcançou o alvo
                 score += 10 + (snakeBody.size() * 2);
-                eatenFactors.clear();
+                eatenNumbers.clear();
                 
                 // Cobra cresce
                 snakeBody.add(new Tile(eatenFood.position.x, eatenFood.position.y));
+                
+                // Verificar mudança de nível
+                if (score >= targetScore) {
+                    levelUp();
+                }
                 
                 // Gerar novo alvo
                 generateNewTarget();
                 placeFoods();
                 
-                // Efeito visual de sucesso - flash verde com fade-out
+                // Efeito visual de sucesso
                 victoryFlash = true;
                 penaltyFlash = false;
                 flashCounter = 10;
                 
-            } else if (newProduct > targetNumber || targetNumber % newProduct != 0) {
-                // PENALIDADE! Ultrapassou o alvo OU não é divisor do alvo
-                currentProduct = 1;
+            } else if (isValidMove) {
+                // Movimento válido, mas não alcançou o alvo ainda
+                currentResult = newResult;
+                eatenNumbers.add(eatenFood.number);
+                
+                // Cobra cresce um pouco
+                snakeBody.add(new Tile(eatenFood.position.x, eatenFood.position.y));
+                
+                // Regenerar frutas
+                placeFoods();
+                
+            } else {
+                // PENALIDADE! Movimento inválido
                 lives--;
-                eatenFactors.clear();
+                eatenNumbers.clear();
                 
                 // Diminuir cobra (remover últimos 2 segmentos)
                 if (snakeBody.size() > 0) {
@@ -490,24 +608,14 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
                 penaltyFlash = true;
                 flashCounter = 10;
                 
-                // Regenerar frutas (alvo permanece o mesmo)
+                // Regenerar alvo e frutas
+                generateNewTarget();
                 placeFoods();
                 
                 // Game over se ficar sem vidas
                 if (lives <= 0) {
                     gameOver = true;
                 }
-                
-            } else {
-                // Produto válido e menor que o alvo
-                currentProduct = newProduct;
-                eatenFactors.add(eatenFood.number);
-                
-                // Cobra cresce um pouco
-                snakeBody.add(new Tile(eatenFood.position.x, eatenFood.position.y));
-                
-                // Regenerar frutas com novos fatores necessários
-                placeFoods();
             }
             
             // Remover a fruta comida
@@ -563,6 +671,37 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
                 victoryFlash = false;
             }
         }
+        
+        // Decrementar contador de flash de level up
+        if (levelUpFlashCounter > 0) {
+            levelUpFlashCounter--;
+            if (levelUpFlashCounter == 0) {
+                levelUpFlash = false;
+            }
+        }
+    }
+    
+    private int calculateNewResult(int current, int number, String operator) {
+        switch (operator) {
+            case "+":
+                return current + number;
+            case "x":
+                return current * number;
+            default:
+                return current;
+        }
+    }
+    
+    private void levelUp() {
+        level++;
+        targetScore = score + 30; // Próximo nível requer mais 30 pontos
+        
+        // Atualizar velocidade do jogo
+        gameLoop.setDelay(getGameSpeed());
+        
+        // Efeito visual de mudança de nível - flash verde prolongado
+        levelUpFlash = true;
+        levelUpFlashCounter = 30; // Flash mais longo que vitória normal
     }
 
     public boolean collision(Tile tile1, Tile tile2) {
@@ -621,10 +760,13 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         snakeBody.clear();
         
         // Resetar variáveis matemáticas
-        currentProduct = 1;
+        level = 1;
+        targetScore = 30;
+        currentOperator = "+";
+        currentResult = 0;
         score = 0;
         lives = 3;
-        eatenFactors.clear();
+        eatenNumbers.clear();
         
         // Resetar movimento
         velocityX = 1;
@@ -634,13 +776,16 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         gameOver = false;
         penaltyFlash = false;
         victoryFlash = false;
+        levelUpFlash = false;
         flashCounter = 0;
+        levelUpFlashCounter = 0;
         
         // Gerar novo alvo e frutas
         generateNewTarget();
         placeFoods();
         
-        // Reiniciar timer
+        // Reiniciar timer com velocidade inicial
+        gameLoop.setDelay(getGameSpeed());
         gameLoop.start();
     }
 
