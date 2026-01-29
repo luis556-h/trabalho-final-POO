@@ -6,7 +6,8 @@ public class Menu extends JPanel implements KeyListener {
     int boardWidth;
     int boardHeight;
     
-    private int selectedOption = 0; // 0 = Jogar, 1 = Sair
+    private int selectedOption = 0; // 0 = Jogar, 1 = Como Jogar, 2 = Sair
+    private boolean showingHowToPlay = false;
     private boolean enterPressed = false;
     
     // Callback para quando o jogador selecionar uma opção
@@ -42,6 +43,11 @@ public class Menu extends JPanel implements KeyListener {
         
         // Desenhar cobra decorativa no fundo (serpente estilizada)
         drawDecorativeSnake(g2d);
+
+        if (showingHowToPlay) {
+            drawHowToPlay(g2d);
+            return;
+        }
         
         // Título do jogo - "MATH SNAKE"
         g2d.setFont(new Font("Monospaced", Font.BOLD, 60));
@@ -70,7 +76,7 @@ public class Menu extends JPanel implements KeyListener {
         int menuStartY = 250;
         int menuSpacing = 70;
         
-        String[] options = {"JOGAR", "SAIR"};
+        String[] options = {"JOGAR", "COMO JOGAR", "SAIR"};
         
         for (int i = 0; i < options.length; i++) {
             int optionY = menuStartY + (i * menuSpacing);
@@ -104,7 +110,7 @@ public class Menu extends JPanel implements KeyListener {
             
             g2d.drawString(options[i], textX, optionY);
         }
-        
+
         // Instruções
         g2d.setFont(new Font("Monospaced", Font.PLAIN, 14));
         g2d.setColor(new Color(100, 100, 120));
@@ -112,6 +118,66 @@ public class Menu extends JPanel implements KeyListener {
         FontMetrics fmInst = g2d.getFontMetrics();
         int instX = (boardWidth - fmInst.stringWidth(instructions)) / 2;
         g2d.drawString(instructions, instX, boardHeight - 30);
+
+        // Crédito (centralizado abaixo das dicas)
+        g2d.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        g2d.setColor(new Color(120, 120, 140));
+        String credit = "Feito por Luiz Henrique :)";
+        FontMetrics fmCredit = g2d.getFontMetrics();
+        int creditX = (boardWidth - fmCredit.stringWidth(credit)) / 2;
+        g2d.drawString(credit, creditX, boardHeight - 12);
+    }
+
+    private void drawHowToPlay(Graphics2D g2d) {
+        // Título
+        g2d.setFont(new Font("Monospaced", Font.BOLD, 36));
+        g2d.setColor(new Color(0, 255, 100));
+        String title = "COMO JOGAR";
+        FontMetrics fmTitle = g2d.getFontMetrics();
+        int titleX = (boardWidth - fmTitle.stringWidth(title)) / 2;
+        g2d.drawString(title, titleX, 80);
+
+        // Caixa de conteúdo
+        g2d.setColor(new Color(0, 0, 0, 120));
+        g2d.fillRoundRect(40, 110, boardWidth - 80, 380, 20, 20);
+        g2d.setColor(new Color(0, 255, 255, 120));
+        g2d.setStroke(new BasicStroke(2));
+        g2d.drawRoundRect(40, 110, boardWidth - 80, 380, 20, 20);
+
+        g2d.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        g2d.setColor(Color.WHITE);
+
+        int x = 70;
+        int y = 150;
+        int line = 24;
+
+        g2d.drawString("CONTROLES:", x, y); y += line;
+        g2d.drawString("- Mover: Setas ou WASD", x, y); y += line;
+        g2d.drawString("- Pausar: ENTER", x, y); y += line;
+        g2d.drawString("- No pause: R reinicia | ESC volta ao menu", x, y); y += line;
+
+        y += 10;
+        g2d.drawString("OBJETIVO:", x, y); y += line;
+        g2d.drawString("- Comer o número correto para completar a equação", x, y); y += line;
+
+        y += 10;
+        g2d.drawString("PONTUAÇÃO E PROGRESSÃO:", x, y); y += line;
+        g2d.drawString("- Acerto soma pontos e a cobra cresce", x, y); y += line;
+        g2d.drawString("- Ao atingir a meta, você sobe de nível", x, y); y += line;
+        g2d.drawString("- Níveis altos adicionam operadores e aumentam a meta", x, y); y += line;
+
+        y += 10;
+        g2d.drawString("COMO PERDER:", x, y); y += line;
+        g2d.drawString("- Escolher número errado diminui vidas e encurta a cobra", x, y); y += line;
+        g2d.drawString("- Sem vidas: Game Over", x, y);
+
+        // Rodapé
+        g2d.setFont(new Font("Monospaced", Font.PLAIN, 14));
+        g2d.setColor(new Color(150, 150, 150));
+        String footer = "Pressione ESC para voltar";
+        FontMetrics fmFooter = g2d.getFontMetrics();
+        int footerX = (boardWidth - fmFooter.stringWidth(footer)) / 2;
+        g2d.drawString(footer, footerX, boardHeight - 30);
     }
     
     private void drawDecorativeSnake(Graphics2D g2d) {
@@ -139,17 +205,28 @@ public class Menu extends JPanel implements KeyListener {
     
     @Override
     public void keyPressed(KeyEvent e) {
+        if (showingHowToPlay) {
+            if (e.getKeyCode() == KeyEvent.VK_ESCAPE || e.getKeyCode() == KeyEvent.VK_ENTER) {
+                showingHowToPlay = false;
+                repaint();
+            }
+            return;
+        }
+
         if (e.getKeyCode() == KeyEvent.VK_UP) {
             selectedOption--;
-            if (selectedOption < 0) selectedOption = 1;
+            if (selectedOption < 0) selectedOption = 2;
             repaint();
         } else if (e.getKeyCode() == KeyEvent.VK_DOWN) {
             selectedOption++;
-            if (selectedOption > 1) selectedOption = 0;
+            if (selectedOption > 2) selectedOption = 0;
             repaint();
         } else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
             if (selectedOption == 0) {
                 callback.onStartGame();
+            } else if (selectedOption == 1) {
+                showingHowToPlay = true;
+                repaint();
             } else {
                 callback.onExit();
             }

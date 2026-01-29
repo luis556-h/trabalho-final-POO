@@ -4,46 +4,39 @@
 
 # Math Snake
 
-Um jogo educativo da cobrinha (Snake) com mecânicas de multiplicação matemática! Desenvolvido em Java com Swing/AWT como trabalho final de Programação Orientada a Objetos.
+Um jogo educativo da cobrinha (Snake) com equações matemáticas. Desenvolvido em Java com Swing/AWT como trabalho final de Programação Orientada a Objetos.
 
 ## Conceito do Jogo
 
-Ao invés de simplesmente comer frutas, você precisa usar estratégia matemática para multiplicar números e atingir um **alvo específico**.
+Ao invés de simplesmente comer frutas, você precisa resolver uma **equação com valor faltante**. O objetivo é comer o número que completa a equação.
 
 ### Como Funciona:
 
-1. **Número Alvo**: Aparece no topo da tela (ex: 24)
-2. **Produto Atual**: Começa em 1 e é multiplicado pelos números que você come
-3. **Frutas Numeradas**: Cada fruta contém um número de 2 a 9
-4. **Objetivo**: Coma a sequência correta de números para que o produto seja exatamente igual ao alvo!
+1. **Equação no HUD**: aparece algo como `? + 7 = 12` ou `9 ÷ ? = 3`.
+2. **Número faltante**: o `?` é o valor que você deve comer.
+3. **Frutas numeradas**: várias frutas aparecem com números diferentes.
+4. **Objetivo**: coma a fruta cujo número completa a equação.
 
 ## Lógica do Jogo
 
-### ✅ Condição de Vitória
-Quando você come uma fruta e o produto resultante é **exatamente igual ao alvo**:
-- ✅ Você ganha 10 pontos + (tamanho da cobra × 2)
+### ✅ Acerto
+Quando você come o número correto:
+- ✅ Você ganha **10 pontos + (tamanho da cobra × 2)**
 - ✅ A cobra cresce em 1 segmento
-- ✅ Flash verde suave no cenário (confirmação visual)
-- ✅ Um novo alvo é gerado
-- ✅ O produto atual reseta para 1
-- ✅ Novas frutas são posicionadas na tela
+- ✅ Flash verde suave no cenário
+- ✅ Uma nova equação é gerada
+- ✅ Novas frutas são posicionadas
 
-### ❌ Condição de Penalidade
-Acontece quando você come um número que resulta em:
-- **Produto > Alvo**: Ultrapassou o número necessário
-- **Alvo % Produto ≠ 0**: O produto não é divisor do alvo
-
-**Consequências da Penalidade:**
+### ❌ Erro (Penalidade)
+Quando você come um número incorreto:
 - ❌ Perde 1 vida (de 3 vidas totais)
 - ❌ A cobra diminui em 2 segmentos
 - ❌ Flash vermelho suave no cenário
-- ❌ Produto atual reseta para 1
-- ❌ O alvo permanece o mesmo
-- ❌ Novas frutas são regeneradas
+- ❌ Nova equação e novas frutas são geradas
 
 ### Game Over
 O jogo termina quando:
-1. Suas vidas chegam a 0 (após penalidades)
+1. Suas vidas chegam a 0
 2. A cobra colide consigo mesma
 
 ## Como Jogar
@@ -55,8 +48,13 @@ O jogo termina quando:
 - **ENTER**: Selecionar opção
 
 **Durante o Jogo:**
-- **↑ ↓ ← →**: Controlar direção da cobra
+- **↑ ↓ ← →** ou **W A S D**: Controlar direção da cobra
 - *Observação: Não pode fazer 180° (virar para trás diretamente)*
+- **ENTER**: Pausar/retomar
+
+**No Pause:**
+- **R**: Reiniciar o jogo
+- **ESC**: Voltar ao menu
 
 **Tela de Game Over:**
 - **R**: Reiniciar o jogo
@@ -78,27 +76,17 @@ javac App.java
 java App
 ```
 
-### Alvos Possíveis:
-```
-12, 15, 18, 20, 24, 28, 30, 32, 36, 40, 42, 45, 48, 54, 56, 60,
-63, 64, 72, 80, 81, 84, 90, 96, 100, 108, 120, 144
-```
-
-### Exemplo de Sequências Vencedoras:
-```
-Alvo: 60
-
-Opção 1: 5 → 12 (5×12=60) ✅
-Opção 2: 3 → 4 → 5 (3×4×5=60) ✅
-Opção 3: 2 → 2 → 3 → 5 (2×2×3×5=60) ✅
-Opção 4: 6 → 2 → 5 (6×2×5=60) ✅
-```
-
 ## Sistema de Pontuação
 
-- **Acertar o alvo**: 10 pontos base
+- **Acertar o número**: 10 pontos base
 - **Bônus por tamanho**: +2 pontos por cada segmento da cobra
 - **Fórmula**: `Pontos = 10 + (tamanho_cobra × 2)`
+
+### Progressão de Nível
+- A meta de pontos aumenta conforme o tamanho da cobra e o nível.
+- Nos níveis 1 a 3, os operadores são **+** e **-**.
+- A partir do nível 4, entram **x** e **÷**.
+- A velocidade do jogo aumenta levemente após os níveis iniciais.
 
 **Exemplo:**
 - Cobra com 5 segmentos: 10 + (5 × 2) = **20 pontos**
@@ -136,14 +124,13 @@ Opção 4: 6 → 2 → 5 (6×2×5=60) ✅
   - `hudHeight`: Altura do painel de informações
   - `snakeHead`, `snakeBody`: Estrutura da cobra
   - `foods`: Lista de frutas na tela
-  - `targetNumber`, `currentProduct`: Lógica matemática
+  - `targetNumber`, `missingValue`: Lógica matemática da equação
   - `score`, `lives`: Estado do jogo
   - `velocityX/Y`: Direção do movimento
   
 - **Métodos Principais:**
-  - `generateNewTarget()`: Gera novo número alvo
-  - `placeFoods()`: Posiciona frutas inteligentemente
-  - `getFactors()`: Calcula fatores de um número
+  - `generateNewTarget()`: Gera nova equação com valor faltante
+  - `placeFoods()`: Posiciona frutas com números no grid
   - `placeFood()`: Posiciona fruta individual (com verificações)
   - `move()`: Lógica de movimento e colisões
   - `draw()`: Renderização de todos os elementos

@@ -65,6 +65,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
     Timer gameLoop;
 
     boolean gameOver = false;
+    boolean paused = false;
     boolean penaltyFlash = false;  // Para efeito visual de penalidade
     boolean victoryFlash = false;  // Para efeito visual de vitória
     int flashCounter = 0;           // Contador para animação do flash
@@ -90,10 +91,10 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         
         // Inicializar variáveis matemáticas
         level = 1;
-        targetScore = 30; // Pontos necessários para nível 2
         currentOperator = "+"; // Começar com adição
         score = 0;
         lives = 3;
+        targetScore = computeNextTargetScore();
         generateNewTarget();
         placeFoods();
 
@@ -283,6 +284,14 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
             g2d.drawString("Nível Alcançado: " + level, 20, hudY + 45);
             g2d.drawString("Pressione R para reiniciar", 20, hudY + 65);
             g2d.drawString("Pressione ESC para voltar ao menu", 250, hudY + 65);
+        } else if (paused) {
+            g2d.setColor(new Color(255, 255, 100));
+            g2d.drawString("PAUSADO", 20, hudY);
+            g2d.setFont(new Font("Monospaced", Font.BOLD, 14));
+            g2d.setColor(Color.WHITE);
+            g2d.drawString("Pressione ENTER para continuar", 20, hudY + 25);
+            g2d.drawString("Pressione R para reiniciar", 20, hudY + 45);
+            g2d.drawString("Pressione ESC para voltar ao menu", 250, hudY + 45);
         } else {
             // Linha 1: Nível e vidas
             g2d.setColor(new Color(255, 200, 0));
@@ -295,17 +304,21 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
             g2d.setColor(new Color(0, 255, 100));
             g2d.drawString("PONTOS: " + score + "/" + targetScore, 350, hudY);
             
-            // Linha 2: Equação matemática GRANDE e COLORIDA
+            // Linha 2: Equação matemática GRANDE e COLORIDA (centralizada)
             g2d.setFont(new Font("Monospaced", Font.BOLD, 30));
             String equation = buildEquationHint();
             g2d.setColor(new Color(0, 255, 255));
-            g2d.drawString(equation, 20, hudY + 50);
+            FontMetrics eqFm = g2d.getFontMetrics();
+            int eqX = (boardWidth - eqFm.stringWidth(equation)) / 2;
+            g2d.drawString(equation, eqX, hudY + 50);
             
             // Linha 3: Operadores disponíveis
             g2d.setFont(new Font("Monospaced", Font.PLAIN, 14));
             String availableOps = getAvailableOperators();
             g2d.setColor(new Color(150, 150, 150));
-            g2d.drawString(availableOps, 20, hudY + 75);
+            FontMetrics opsFm = g2d.getFontMetrics();
+            int opsX = (boardWidth - opsFm.stringWidth(availableOps)) / 2;
+            g2d.drawString(availableOps, opsX, hudY + 75);
         }
     }
 
@@ -497,21 +510,14 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
             attempts++;
         } while (!validPosition && attempts < 50);
         
-        // Cores neon baseadas no número e importância
-        Color fruitColor;
-        if (isNecessary) {
-            // Frutas necessárias em cores mais vibrantes
-            fruitColor = new Color(255, 100, 255); // Magenta neon
-        } else {
-            // Distratores em cores variadas
-            Color[] colors = {
-                new Color(255, 50, 50),    // Vermelho
-                new Color(255, 150, 0),    // Laranja
-                new Color(50, 150, 255),   // Azul
-                new Color(255, 200, 50),   // Amarelo
-            };
-            fruitColor = colors[random.nextInt(colors.length)];
-        }
+        // Cores aleatórias alternando entre amarelo, vermelho, azul e roxo
+        Color[] colors = {
+            new Color(255, 50, 50),    // Vermelho
+            new Color(255, 200, 50),   // Amarelo
+            new Color(50, 150, 255),   // Azul
+            new Color(180, 80, 255),   // Roxo
+        };
+        Color fruitColor = colors[random.nextInt(colors.length)];
         
         foods.add(new NumberedFood(x, y, number, fruitColor));
     }
@@ -640,7 +646,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
     
     private void levelUp() {
         level++;
-        targetScore = score + 30; // Próximo nível requer mais 30 pontos
+        targetScore = computeNextTargetScore();
         
         // Atualizar velocidade do jogo
         gameLoop.setDelay(getGameSpeed());
@@ -661,8 +667,17 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         return tile1.x == tile2.x && tile1.y == tile2.y;
     }
 
+    private int computeNextTargetScore() {
+        int pointsPerHit = 10 + (snakeBody.size() * 2);
+        int hitsRequired = 3 + (level / 2);
+        return score + (pointsPerHit * hitsRequired);
+    }
+
     @Override
     public void actionPerformed(ActionEvent e) { //called every x milliseconds by gameLoop timer
+        if (paused) {
+            return;
+        }
         move();
         repaint();
         if (gameOver) {
@@ -672,20 +687,40 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
 
     @Override
     public void keyPressed(KeyEvent e) {
+        // Enter para pausar/retomar durante a gameplay
+        if (e.getKeyCode() == KeyEvent.VK_ENTER && !gameOver) {
+            togglePause();
+            return;
+        }
+
+        // Opções enquanto pausado
+        if (paused) {
+            if (e.getKeyCode() == KeyEvent.VK_R) {
+                restartGame();
+            }
+            if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+                if (app != null) {
+                    stopBackgroundMusic();
+                    app.returnToMenu();
+                }
+            }
+            return;
+        }
+
         // Controles de movimento
-        if (e.getKeyCode() == KeyEvent.VK_UP && velocityY != 1) {
+        if ((e.getKeyCode() == KeyEvent.VK_UP || e.getKeyCode() == KeyEvent.VK_W) && velocityY != 1) {
             velocityX = 0;
             velocityY = -1;
         }
-        else if (e.getKeyCode() == KeyEvent.VK_DOWN && velocityY != -1) {
+        else if ((e.getKeyCode() == KeyEvent.VK_DOWN || e.getKeyCode() == KeyEvent.VK_S) && velocityY != -1) {
             velocityX = 0;
             velocityY = 1;
         }
-        else if (e.getKeyCode() == KeyEvent.VK_LEFT && velocityX != 1) {
+        else if ((e.getKeyCode() == KeyEvent.VK_LEFT || e.getKeyCode() == KeyEvent.VK_A) && velocityX != 1) {
             velocityX = -1;
             velocityY = 0;
         }
-        else if (e.getKeyCode() == KeyEvent.VK_RIGHT && velocityX != -1) {
+        else if ((e.getKeyCode() == KeyEvent.VK_RIGHT || e.getKeyCode() == KeyEvent.VK_D) && velocityX != -1) {
             velocityX = 1;
             velocityY = 0;
         }
@@ -714,10 +749,10 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         
         // Resetar variáveis matemáticas
         level = 1;
-        targetScore = 30;
         currentOperator = "+";
         score = 0;
         lives = 3;
+        targetScore = computeNextTargetScore();
         
         // Resetar movimento
         velocityX = 1;
@@ -725,6 +760,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         
         // Resetar flags
         gameOver = false;
+        paused = false;
         penaltyFlash = false;
         victoryFlash = false;
         levelUpFlash = false;
@@ -746,4 +782,14 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
 
     @Override
     public void keyReleased(KeyEvent e) {}
+
+    private void togglePause() {
+        paused = !paused;
+        if (paused) {
+            gameLoop.stop();
+            repaint();
+        } else {
+            gameLoop.start();
+        }
+    }
 }
