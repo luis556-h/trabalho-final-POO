@@ -4,11 +4,13 @@ import java.util.ArrayList;
 import java.util.Random;
 import java.util.List;
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.sound.sampled.*;
 import java.io.File;
 import java.io.IOException;
 
 public class SnakeGame extends JPanel implements ActionListener, KeyListener {
+    // Inner classes for Game Objects
     private class Tile {
         int x;
         int y;
@@ -31,83 +33,428 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         }
     }
 
+    // UI Components
+    private ScorePanel scorePanel;
+    private BoardPanel boardPanel;
+    private JPanel overlayPanel;
+    private JLabel overlayTitle;
+    private JLabel overlaySubtitle;
+    private JPanel overlayButtons;
+
+    // Game Constants
     int boardWidth;
     int boardHeight;
     int tileSize = 25;
-    int hudHeight = 100;  // Altura do HUD em pixels
-    int playableHeight;  // Altura jogável (excluindo HUD)
+    int hudHeight = 100;
+    int playableHeight;
     
-    //snake
+    // Snake
     Tile snakeHead;
     ArrayList<Tile> snakeBody;
 
-    //math snake - frutas com números
+    // Game Logic Variables
     ArrayList<NumberedFood> foods;
     Random random;
 
-    //math game logic
-    int targetNumber;      // Resultado da equação
-    int score;             // Pontuação do jogador
-    int lives;             // Vidas do jogador
-    int level;             // Nível atual do jogador
-    int targetScore;       // Pontos necessários para próximo nível
-    String currentOperator; // Operador atual: "+", "-", "x", "÷"
-    int operandA;           // Operando esquerdo (pode estar faltando)
-    int operandB;           // Operando direito (pode estar faltando)
-    int missingValue;       // Valor faltante que o jogador deve encontrar
-    boolean missingLeft;    // true = falta o operando esquerdo, false = falta o direito
-    boolean levelUpFlash = false; // Flash verde de level up
-    int levelUpFlashCounter = 0;   // Contador para flash de level up
+    int targetNumber; 
+    int score;             
+    int lives;             
+    int level;             
+    int targetScore;       
+    String currentOperator; 
+    int operandA;           
+    int operandB;           
+    int missingValue;       
+    boolean missingLeft;    
+    boolean missingResult;  
     
-    //game logic
+    // Animation/State Flags
+    boolean levelUpFlash = false; 
+    int levelUpFlashCounter = 0;   
+    
     int velocityX;
     int velocityY;
     Timer gameLoop;
 
     boolean gameOver = false;
     boolean paused = false;
-    boolean penaltyFlash = false;  // Para efeito visual de penalidade
-    boolean victoryFlash = false;  // Para efeito visual de vitória
-    int flashCounter = 0;           // Contador para animação do flash
+    boolean penaltyFlash = false;  
+    boolean victoryFlash = false;  
+    int flashCounter = 0;           
     
-    private App app; // Referência ao App para retornar ao menu
-    private Clip audioClip; // Clip de áudio para a soundtrack
+    private App app; 
+    private Clip audioClip;
 
-    SnakeGame(int boardWidth, int boardHeight, App app) {
+    // -------------------------------------------------------------------------
+    // SCORE PANEL (North)
+    // -------------------------------------------------------------------------
+    private class ScorePanel extends JPanel {
+        private JLabel levelLabel;
+        private JLabel livesLabel;
+        private JLabel scoreLabel;
+        private JLabel equationLabel;
+        private JLabel operatorsLabel;
+
+        public ScorePanel() {
+            setLayout(new BorderLayout());
+            setPreferredSize(new Dimension(boardWidth, hudHeight));
+            setBackground(new Color(15, 15, 25));
+            setBorder(new EmptyBorder(5, 10, 5, 10));
+
+            // Top Row: Level, Lives, Score
+            JPanel topPanel = new JPanel(new GridLayout(1, 3));
+            topPanel.setOpaque(false);
+            
+            levelLabel = createLabel("NÍVEL: 1", new Color(255, 200, 0), 18);
+            livesLabel = createLabel("❤ 3", new Color(255, 0, 255), 18);
+            livesLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            scoreLabel = createLabel("PONTOS: 0/0", new Color(0, 255, 100), 18);
+            scoreLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+
+            topPanel.add(levelLabel);
+            topPanel.add(livesLabel);
+            topPanel.add(scoreLabel);
+
+            // Middle Row: Equation
+            JPanel centerPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+            centerPanel.setOpaque(false);
+            equationLabel = createLabel("", new Color(0, 255, 255), 30);
+            centerPanel.add(equationLabel);
+
+            // Bottom Row: Operators
+            JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+            bottomPanel.setOpaque(false);
+            operatorsLabel = createLabel("", new Color(150, 150, 150), 14);
+            bottomPanel.add(operatorsLabel);
+
+            add(topPanel, BorderLayout.NORTH);
+            add(centerPanel, BorderLayout.CENTER);
+            add(bottomPanel, BorderLayout.SOUTH);
+        }
+
+        private JLabel createLabel(String text, Color color, int size) {
+            JLabel lbl = new JLabel(text);
+            lbl.setFont(new Font("Monospaced", Font.BOLD, size));
+            lbl.setForeground(color);
+            return lbl;
+        }
+
+        public void updateStats() {
+            levelLabel.setText("NÍVEL: " + level);
+            livesLabel.setText("❤ " + lives);
+            scoreLabel.setText("PONTOS: " + score + "/" + targetScore);
+            equationLabel.setText(buildEquationHint());
+            operatorsLabel.setText(getAvailableOperators());
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // BOARD PANEL (Center - Game Rendering)
+    // -------------------------------------------------------------------------
+    private class BoardPanel extends JPanel {
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2d = (Graphics2D) g;
+
+            // Shift coordinate system so logic (which assumes y starts at hudHeight)
+            // maps correctly to this panel (where 0,0 is top-left).
+            g2d.translate(0, -hudHeight);
+
+            // Antialiasing
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+            drawGameContent(g2d);
+        }
+    }
+
+    public SnakeGame(int boardWidth, int boardHeight, App app) {
         this.boardWidth = boardWidth;
         this.boardHeight = boardHeight;
-        this.playableHeight = boardHeight - hudHeight; // Área jogável abaixo do HUD
+        this.playableHeight = boardHeight - hudHeight; 
         this.app = app;
+        
+        // Setup Main Layout
         setPreferredSize(new Dimension(this.boardWidth, this.boardHeight));
-        setBackground(new Color(20, 20, 30)); // Dark Mode background
-        addKeyListener(this);
+        setBackground(new Color(20, 20, 30));
+        setLayout(new BorderLayout());
         setFocusable(true);
+        addKeyListener(this);
 
-        snakeHead = new Tile(5, (int) Math.ceil((double) hudHeight / tileSize));
-        snakeBody = new ArrayList<Tile>();
-
+        // -- Score Panel --
+        // Initial setup variables before creating panel
         foods = new ArrayList<NumberedFood>();
         random = new Random();
-        
-        // Inicializar variáveis matemáticas
+        snakeHead = new Tile(5, (int) Math.ceil((double) hudHeight / tileSize));
+        snakeBody = new ArrayList<Tile>();
         level = 1;
-        currentOperator = "+"; // Começar com adição
-        score = 0;
+        currentOperator = "+";
         lives = 3;
         targetScore = computeNextTargetScore();
-        generateNewTarget();
-        placeFoods();
+        generateNewTarget(); // Need this for equation label init
+        
+        scorePanel = new ScorePanel();
+        add(scorePanel, BorderLayout.NORTH);
 
+        // -- Layered Pane for Game + Overlay --
+        JLayeredPane layeredPane = new JLayeredPane();
+        layeredPane.setLayout(null);
+        layeredPane.setPreferredSize(new Dimension(boardWidth, playableHeight));
+        add(layeredPane, BorderLayout.CENTER);
+
+        // 1. Board Panel (Game View)
+        boardPanel = new BoardPanel();
+        boardPanel.setBackground(new Color(20, 20, 30));
+        boardPanel.setBounds(0, 0, boardWidth, playableHeight);
+        layeredPane.add(boardPanel, JLayeredPane.DEFAULT_LAYER);
+
+        // 2. Overlay Panel (Notifications)
+        createOverlayPanel();
+        overlayPanel.setBounds(0, 0, boardWidth, playableHeight);
+        layeredPane.add(overlayPanel, JLayeredPane.PALETTE_LAYER);
+
+        // Logic Init
+        placeFoods();
         velocityX = 1;
         velocityY = 0;
         
-        // Iniciar música de fundo
         playBackgroundMusic("sdtrack.wav");
         
-		//game timer (velocidade ajustável por nível)
-		gameLoop = new Timer(getGameSpeed(), this);
+        gameLoop = new Timer(getGameSpeed(), this);
         gameLoop.start();
-	}	
+        
+        // Initial label update
+        scorePanel.updateStats();
+    }
+
+    private void createOverlayPanel() {
+        overlayPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setColor(getBackground());
+                g2d.fillRect(0, 0, getWidth(), getHeight());
+            }
+        };
+        overlayPanel.setLayout(new BoxLayout(overlayPanel, BoxLayout.Y_AXIS));
+        overlayPanel.setOpaque(false);
+        overlayPanel.setBackground(new Color(0, 0, 0, 60)); // More transparent overlay
+        overlayPanel.setVisible(false);
+
+        overlayPanel.add(Box.createVerticalStrut(40));
+
+        // Boxed content to highlight texts
+        JPanel contentBox = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setColor(new Color(0, 0, 0, 180));
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+            }
+        };
+        contentBox.setOpaque(false);
+        contentBox.setLayout(new BoxLayout(contentBox, BoxLayout.Y_AXIS));
+        contentBox.setBorder(new EmptyBorder(20, 30, 20, 30));
+        contentBox.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        overlayTitle = new JLabel("PAUSADO");
+        overlayTitle.setFont(new Font("Monospaced", Font.BOLD, 48));
+        overlayTitle.setForeground(Color.WHITE);
+        overlayTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
+        contentBox.add(overlayTitle);
+
+        contentBox.add(Box.createVerticalStrut(15));
+
+        overlaySubtitle = new JLabel("");
+        overlaySubtitle.setFont(new Font("Monospaced", Font.BOLD, 18));
+        overlaySubtitle.setForeground(Color.WHITE);
+        overlaySubtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
+        contentBox.add(overlaySubtitle);
+
+        contentBox.add(Box.createVerticalStrut(20));
+
+        // Instructions/Buttons Panel
+        overlayButtons = new JPanel();
+        overlayButtons.setLayout(new BoxLayout(overlayButtons, BoxLayout.Y_AXIS));
+        overlayButtons.setOpaque(false);
+        
+        JLabel lblContinue = new JLabel("Pressione ENTER para continuar"); // Only for pause
+        lblContinue.setFont(new Font("Monospaced", Font.PLAIN, 16));
+        lblContinue.setForeground(Color.LIGHT_GRAY);
+        lblContinue.setAlignmentX(Component.CENTER_ALIGNMENT);
+        
+        JLabel lblRestart = new JLabel("Pressione R para reiniciar");
+        lblRestart.setFont(new Font("Monospaced", Font.PLAIN, 16));
+        lblRestart.setForeground(Color.LIGHT_GRAY);
+        lblRestart.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel lblMenu = new JLabel("Pressione ESC para Menu");
+        lblMenu.setFont(new Font("Monospaced", Font.PLAIN, 16));
+        lblMenu.setForeground(Color.LIGHT_GRAY);
+        lblMenu.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        overlayButtons.add(lblContinue); 
+        overlayButtons.add(Box.createVerticalStrut(10));
+        overlayButtons.add(lblRestart);
+        overlayButtons.add(Box.createVerticalStrut(10));
+        overlayButtons.add(lblMenu);
+
+        contentBox.add(overlayButtons);
+        overlayPanel.add(contentBox);
+        overlayPanel.add(Box.createVerticalGlue());
+    }
+
+    private void showGameOver() {
+        overlayTitle.setText("GAME OVER!");
+        overlayTitle.setForeground(new Color(255, 50, 50));
+        overlaySubtitle.setText("Pontuação Final: " + score);
+        
+        // Update instruction text
+        Component[] comps = overlayButtons.getComponents();
+        if (comps.length > 0 && comps[0] instanceof JLabel) {
+             ((JLabel)comps[0]).setText(""); // Clear "Enter to continue"
+        }
+
+        overlayPanel.setVisible(true);
+        overlayPanel.repaint();
+    }
+
+    private void showPause() {
+        overlayTitle.setText("PAUSADO");
+        overlayTitle.setForeground(new Color(255, 255, 100));
+        overlaySubtitle.setText("");
+
+        Component[] comps = overlayButtons.getComponents();
+        if (comps.length > 0 && comps[0] instanceof JLabel) {
+             ((JLabel)comps[0]).setText("Pressione ENTER para continuar");
+        }
+
+        overlayPanel.setVisible(true);
+        overlayPanel.repaint();
+    }
+
+    private void hideOverlay() {
+        overlayPanel.setVisible(false);
+        // Ensure focus remains on the main panel for KeyListener
+        this.requestFocusInWindow();
+    }
+
+    // This method replaces the old draw() method but only renders game elements
+    private void drawGameContent(Graphics2D g2d) {
+        // Efeito de flash vermelho com fade-out suave
+        if (penaltyFlash && flashCounter > 0) {
+            int alpha = (int) (flashCounter * 4); 
+            if (alpha > 40) alpha = 40;
+            if (alpha < 0) alpha = 0;
+            g2d.setColor(new Color(200, 0, 0, alpha));
+            // Coordinates relative to translated origin (0,0 is hudHeight)
+            // Wait, we translated g2d by -hudHeight.
+            // Screen (0,0) is now (0, -hudHeight).
+            // Logic coordinate (0,0) is Top-Left of logic board (which includes HUD area at top).
+            // HUD area is 0..100. Play area is 100..600.
+            // BoardPanel starts at 100.
+            // g2d.translate(0, -100).
+            // If I drawRect(0, 0, W, H) in logic coords...
+            // It draws at -100.
+            // Correct.
+            g2d.fillRect(0, 0, boardWidth, boardHeight);
+        }
+        
+        // Efeito de flash verde com fade-out suave
+        if (victoryFlash && flashCounter > 0) {
+            int alpha = (int) (flashCounter * 5); 
+            if (alpha > 50) alpha = 50;
+            if (alpha < 0) alpha = 0;
+            g2d.setColor(new Color(0, 180, 0, alpha));
+            g2d.fillRect(0, 0, boardWidth, boardHeight);
+        }
+        
+        // Flash Level Up
+        if (levelUpFlash && levelUpFlashCounter > 0) {
+            int alpha = (int) (levelUpFlashCounter * 3);
+            if (alpha > 90) alpha = 90;
+            if (alpha < 0) alpha = 0;
+            g2d.setColor(new Color(0, 255, 0, alpha));
+            g2d.fillRect(0, 0, boardWidth, boardHeight);
+            
+            if (levelUpFlashCounter > 15) {
+                g2d.setColor(Color.WHITE);
+                g2d.setFont(new Font("Monospaced", Font.BOLD, 48));
+                String levelUpText = "NÍVEL " + level + "!";
+                FontMetrics fm = g2d.getFontMetrics();
+                int textX = (boardWidth - fm.stringWidth(levelUpText)) / 2;
+                int textY = boardHeight / 2;
+                g2d.drawString(levelUpText, textX, textY);
+            }
+        }
+        
+        // Grid Lines - apenas na área jogável
+        g2d.setColor(new Color(40, 40, 50));
+        g2d.setStroke(new BasicStroke(1));
+        // Logic grid assumes full board height.
+        // We draw starting from hudHeight/tileSize
+        for(int i = 0; i < boardWidth/tileSize; i++) {
+            g2d.drawLine(i*tileSize, hudHeight, i*tileSize, boardHeight);
+        }
+        for(int i = hudHeight/tileSize; i < boardHeight/tileSize; i++) {
+            g2d.drawLine(0, i*tileSize, boardWidth, i*tileSize); 
+        }
+
+        // Desenhar frutas
+        for (NumberedFood food : foods) {
+            g2d.setColor(food.color);
+            g2d.fillOval(food.position.x * tileSize + 2, food.position.y * tileSize + 2, 
+                        tileSize - 4, tileSize - 4);
+            
+            g2d.setColor(food.color.darker());
+            g2d.setStroke(new BasicStroke(2));
+            g2d.drawOval(food.position.x * tileSize + 2, food.position.y * tileSize + 2, 
+                        tileSize - 4, tileSize - 4);
+            
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.BOLD, 14));
+            FontMetrics fm = g2d.getFontMetrics();
+            String numStr = String.valueOf(food.number);
+            int textWidth = fm.stringWidth(numStr);
+            int textHeight = fm.getAscent();
+            
+            int textX = food.position.x * tileSize + (tileSize - textWidth) / 2;
+            int textY = food.position.y * tileSize + (tileSize + textHeight) / 2 - 2;
+            
+            g2d.drawString(numStr, textX, textY);
+        }
+
+        // Snake Head
+        g2d.setColor(new Color(0, 255, 100));
+        g2d.fillRoundRect(snakeHead.x*tileSize + 1, snakeHead.y*tileSize + 1, 
+                         tileSize - 2, tileSize - 2, 8, 8);
+        
+        // Borda da cabeça
+        g2d.setColor(new Color(0, 200, 80));
+        g2d.setStroke(new BasicStroke(2));
+        g2d.drawRoundRect(snakeHead.x*tileSize + 1, snakeHead.y*tileSize + 1, 
+                         tileSize - 2, tileSize - 2, 8, 8);
+        
+        // Snake Body
+        for (int i = 0; i < snakeBody.size(); i++) {
+            Tile snakePart = snakeBody.get(i);
+            int alpha = 255 - (i * 5); 
+            if (alpha < 100) alpha = 100;
+            
+            g2d.setColor(new Color(0, 200, 80, alpha));
+            g2d.fillRoundRect(snakePart.x*tileSize + 1, snakePart.y*tileSize + 1, 
+                             tileSize - 2, tileSize - 2, 6, 6);
+		}
+    }
+    
+    // We removed drawHUD() because ScorePanel handles it.
+
+    // -------------------------------------------------------------------------
+    // Keeping original logic methods, only updating paintComponent related calls
+    // -------------------------------------------------------------------------
     
     /**
      * Reproduz música de fundo em loop
@@ -144,188 +491,20 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         }
     }
     
+    @Override
     public void paintComponent(Graphics g) {
-		super.paintComponent(g);
-		draw(g);
-	}
-
-	public void draw(Graphics g) {
-        Graphics2D g2d = (Graphics2D) g;
-        
-        // Ativar antialiasing para gráficos suaves
-        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        
-        // Efeito de flash vermelho com fade-out suave quando houver penalidade
-        if (penaltyFlash && flashCounter > 0) {
-            int alpha = (int) (flashCounter * 4); // 10 * 4 = 40 alpha máximo
-            if (alpha > 40) alpha = 40;
-            if (alpha < 0) alpha = 0;
-            g2d.setColor(new Color(200, 0, 0, alpha));
-            g2d.fillRect(0, 0, boardWidth, boardHeight);
-        }
-        
-        // Efeito de flash verde com fade-out suave quando acertar o alvo
-        if (victoryFlash && flashCounter > 0) {
-            int alpha = (int) (flashCounter * 5); // 10 * 5 = 50 alpha máximo
-            if (alpha > 50) alpha = 50;
-            if (alpha < 0) alpha = 0;
-            g2d.setColor(new Color(0, 180, 0, alpha));
-            g2d.fillRect(0, 0, boardWidth, boardHeight);
-        }
-        
-        // Efeito de flash verde mais intenso para level up
-        if (levelUpFlash && levelUpFlashCounter > 0) {
-            int alpha = (int) (levelUpFlashCounter * 3); // 30 * 3 = 90 alpha máximo
-            if (alpha > 90) alpha = 90;
-            if (alpha < 0) alpha = 0;
-            g2d.setColor(new Color(0, 255, 0, alpha));
-            g2d.fillRect(0, 0, boardWidth, boardHeight);
-            
-            // Mensagem de level up
-            if (levelUpFlashCounter > 15) {
-                g2d.setColor(Color.WHITE);
-                g2d.setFont(new Font("Monospaced", Font.BOLD, 48));
-                String levelUpText = "NÍVEL " + level + "!";
-                FontMetrics fm = g2d.getFontMetrics();
-                int textX = (boardWidth - fm.stringWidth(levelUpText)) / 2;
-                int textY = boardHeight / 2;
-                g2d.drawString(levelUpText, textX, textY);
-            }
-        }
-        
-        // Linha separadora entre HUD e área jogável
-        g2d.setColor(new Color(0, 255, 255));
-        g2d.setStroke(new BasicStroke(2));
-        g2d.drawLine(0, hudHeight, boardWidth, hudHeight);
-        
-        // Grid Lines (opcional, mais suave) - apenas na área jogável
-        g2d.setColor(new Color(40, 40, 50));
-        g2d.setStroke(new BasicStroke(1));
-        for(int i = 0; i < boardWidth/tileSize; i++) {
-            g2d.drawLine(i*tileSize, hudHeight, i*tileSize, boardHeight);
-        }
-        for(int i = hudHeight/tileSize; i < boardHeight/tileSize; i++) {
-            g2d.drawLine(0, i*tileSize, boardWidth, i*tileSize); 
-        }
-
-        // Desenhar todas as frutas com números
-        for (NumberedFood food : foods) {
-            // Círculo da fruta com cores neon
-            g2d.setColor(food.color);
-            g2d.fillOval(food.position.x * tileSize + 2, food.position.y * tileSize + 2, 
-                        tileSize - 4, tileSize - 4);
-            
-            // Borda mais escura
-            g2d.setColor(food.color.darker());
-            g2d.setStroke(new BasicStroke(2));
-            g2d.drawOval(food.position.x * tileSize + 2, food.position.y * tileSize + 2, 
-                        tileSize - 4, tileSize - 4);
-            
-            // Desenhar o número centralizado
-            g2d.setColor(Color.WHITE);
-            g2d.setFont(new Font("Arial", Font.BOLD, 14));
-            FontMetrics fm = g2d.getFontMetrics();
-            String numStr = String.valueOf(food.number);
-            int textWidth = fm.stringWidth(numStr);
-            int textHeight = fm.getAscent();
-            
-            int textX = food.position.x * tileSize + (tileSize - textWidth) / 2;
-            int textY = food.position.y * tileSize + (tileSize + textHeight) / 2 - 2;
-            
-            g2d.drawString(numStr, textX, textY);
-        }
-
-        // Snake Head (cor neon verde)
-        g2d.setColor(new Color(0, 255, 100));
-        g2d.fillRoundRect(snakeHead.x*tileSize + 1, snakeHead.y*tileSize + 1, 
-                         tileSize - 2, tileSize - 2, 8, 8);
-        
-        // Borda da cabeça
-        g2d.setColor(new Color(0, 200, 80));
-        g2d.setStroke(new BasicStroke(2));
-        g2d.drawRoundRect(snakeHead.x*tileSize + 1, snakeHead.y*tileSize + 1, 
-                         tileSize - 2, tileSize - 2, 8, 8);
-        
-        // Snake Body (gradiente de verde)
-        for (int i = 0; i < snakeBody.size(); i++) {
-            Tile snakePart = snakeBody.get(i);
-            int alpha = 255 - (i * 5); // Fade gradual
-            if (alpha < 100) alpha = 100;
-            
-            g2d.setColor(new Color(0, 200, 80, alpha));
-            g2d.fillRoundRect(snakePart.x*tileSize + 1, snakePart.y*tileSize + 1, 
-                             tileSize - 2, tileSize - 2, 6, 6);
-		}
-
-        // HUD - Informações do Jogo
-        drawHUD(g2d);
-	}
-    
-    private void drawHUD(Graphics2D g2d) {
-        int hudY = 20;
-        
-        // Fundo sólido para o HUD (área fixa, não jogável)
-        g2d.setColor(new Color(15, 15, 25));
-        g2d.fillRect(0, 0, boardWidth, hudHeight);
-        
-        // Borda decorativa
-        g2d.setColor(new Color(0, 0, 0, 180));
-        g2d.fillRoundRect(10, 5, boardWidth - 20, 90, 15, 15);
-        
-        g2d.setFont(new Font("Monospaced", Font.BOLD, 18));
-        
-        if (gameOver) {
-            g2d.setColor(new Color(255, 50, 50));
-            g2d.drawString("GAME OVER!", 20, hudY);
-            g2d.setFont(new Font("Monospaced", Font.BOLD, 14));
-            g2d.setColor(Color.WHITE);
-            g2d.drawString("Pontuação Final: " + score, 20, hudY + 25);
-            g2d.drawString("Nível Alcançado: " + level, 20, hudY + 45);
-            g2d.drawString("Pressione R para reiniciar", 20, hudY + 65);
-            g2d.drawString("Pressione ESC para voltar ao menu", 250, hudY + 65);
-        } else if (paused) {
-            g2d.setColor(new Color(255, 255, 100));
-            g2d.drawString("PAUSADO", 20, hudY);
-            g2d.setFont(new Font("Monospaced", Font.BOLD, 14));
-            g2d.setColor(Color.WHITE);
-            g2d.drawString("Pressione ENTER para continuar", 20, hudY + 25);
-            g2d.drawString("Pressione R para reiniciar", 20, hudY + 45);
-            g2d.drawString("Pressione ESC para voltar ao menu", 250, hudY + 45);
-        } else {
-            // Linha 1: Nível e vidas
-            g2d.setColor(new Color(255, 200, 0));
-            g2d.drawString("NÍVEL: " + level, 20, hudY);
-            
-            g2d.setColor(new Color(255, 0, 255));
-            g2d.drawString("❤ " + lives, 200, hudY);
-            
-            // Pontuação e progresso
-            g2d.setColor(new Color(0, 255, 100));
-            g2d.drawString("PONTOS: " + score + "/" + targetScore, 350, hudY);
-            
-            // Linha 2: Equação matemática GRANDE e COLORIDA (centralizada)
-            g2d.setFont(new Font("Monospaced", Font.BOLD, 30));
-            String equation = buildEquationHint();
-            g2d.setColor(new Color(0, 255, 255));
-            FontMetrics eqFm = g2d.getFontMetrics();
-            int eqX = (boardWidth - eqFm.stringWidth(equation)) / 2;
-            g2d.drawString(equation, eqX, hudY + 50);
-            
-            // Linha 3: Operadores disponíveis
-            g2d.setFont(new Font("Monospaced", Font.PLAIN, 14));
-            String availableOps = getAvailableOperators();
-            g2d.setColor(new Color(150, 150, 150));
-            FontMetrics opsFm = g2d.getFontMetrics();
-            int opsX = (boardWidth - opsFm.stringWidth(availableOps)) / 2;
-            g2d.drawString(availableOps, opsX, hudY + 75);
-        }
+        // Delegate to super is fine, but we use subcomponents now.
+        // We don't want SnakeGame to draw anything itself except background if holes.
+        super.paintComponent(g);
+        // The children (ScorePanel, LayeredPane -> BoardPanel) will paint themselves
     }
+
 
     private String buildEquationHint() {
         String left = missingLeft ? "?" : String.valueOf(operandA);
-        String right = missingLeft ? String.valueOf(operandB) : "?";
-        return left + " " + currentOperator + " " + right + " = " + targetNumber;
+        String right = (!missingLeft && !missingResult) ? "?" : String.valueOf(operandB);
+        String result = missingResult ? "?" : String.valueOf(targetNumber);
+        return left + " " + currentOperator + " " + right + " = " + result;
     }
     
     private String getAvailableOperators() {
@@ -353,60 +532,73 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         int maxSmall = 10;
         int maxMedium = 20;
 
-        if ("÷".equals(currentOperator)) {
-            // Em divisão, manter o número faltante pequeno: sempre falta o divisor
-            missingLeft = false;
-        } else {
-            missingLeft = random.nextBoolean();
-        }
+        // 0 = falta esquerda, 1 = falta direita, 2 = falta resultado
+        int missingType = random.nextInt(3);
+        missingLeft = (missingType == 0);
+        missingResult = (missingType == 2);
 
         switch (currentOperator) {
             case "+":
-                if (missingLeft) {
-                    operandB = 1 + random.nextInt(maxMedium);
-                    missingValue = 1 + random.nextInt(maxMedium);
-                    operandA = missingValue;
-                    targetNumber = operandA + operandB;
+                operandA = 1 + random.nextInt(maxMedium);
+                operandB = 1 + random.nextInt(maxMedium);
+                targetNumber = operandA + operandB;
+
+                if (missingResult) {
+                    missingValue = targetNumber;
+                } else if (missingLeft) {
+                    missingValue = operandA;
                 } else {
-                    operandA = 1 + random.nextInt(maxMedium);
-                    missingValue = 1 + random.nextInt(maxMedium);
-                    operandB = missingValue;
-                    targetNumber = operandA + operandB;
+                    missingValue = operandB;
                 }
                 break;
             case "-":
-                if (missingLeft) {
-                    operandB = 1 + random.nextInt(maxMedium);
-                    missingValue = operandB + random.nextInt(maxMedium - operandB + 1);
-                    operandA = missingValue;
-                    targetNumber = operandA - operandB;
+                // Garantir resultado não-negativo
+                operandA = 1 + random.nextInt(maxMedium);
+                operandB = 1 + random.nextInt(maxMedium);
+                if (operandB > operandA) {
+                    int temp = operandA;
+                    operandA = operandB;
+                    operandB = temp;
+                }
+                targetNumber = operandA - operandB;
+
+                if (missingResult) {
+                    missingValue = targetNumber;
+                } else if (missingLeft) {
+                    missingValue = operandA;
                 } else {
-                    operandA = 1 + random.nextInt(maxMedium);
-                    missingValue = 1 + random.nextInt(operandA);
-                    operandB = missingValue;
-                    targetNumber = operandA - operandB;
+                    missingValue = operandB;
                 }
                 break;
             case "x":
-                if (missingLeft) {
-                    operandB = 1 + random.nextInt(maxSmall);
-                    missingValue = 1 + random.nextInt(maxSmall);
-                    operandA = missingValue;
-                    targetNumber = operandA * operandB;
+                operandA = 1 + random.nextInt(maxSmall);
+                operandB = 1 + random.nextInt(maxSmall);
+                targetNumber = operandA * operandB;
+
+                if (missingResult) {
+                    missingValue = targetNumber;
+                } else if (missingLeft) {
+                    missingValue = operandA;
                 } else {
-                    operandA = 1 + random.nextInt(maxSmall);
-                    missingValue = 1 + random.nextInt(maxSmall);
-                    operandB = missingValue;
-                    targetNumber = operandA * operandB;
+                    missingValue = operandB;
                 }
                 break;
             case "÷":
-                // Equação: dividend ÷ ? = result
-                missingValue = 1 + random.nextInt(maxSmall); // divisor
+                // Criar divisão exata
+                int divisor = 1 + random.nextInt(maxSmall);
                 int result = 1 + random.nextInt(maxSmall);
-                operandA = missingValue * result; // dividend
-                operandB = missingValue;
+                int dividend = divisor * result;
+                operandA = dividend;
+                operandB = divisor;
                 targetNumber = result;
+
+                if (missingResult) {
+                    missingValue = targetNumber;
+                } else if (missingLeft) {
+                    missingValue = operandA;
+                } else {
+                    missingValue = operandB;
+                }
                 break;
         }
     }
@@ -678,10 +870,14 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         if (paused) {
             return;
         }
+        
         move();
-        repaint();
+        boardPanel.repaint();
+        scorePanel.updateStats();
+
         if (gameOver) {
             gameLoop.stop();
+            showGameOver();
         }
     }  
 
@@ -767,6 +963,10 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         flashCounter = 0;
         levelUpFlashCounter = 0;
         
+        // Resetar UI
+        hideOverlay();
+        scorePanel.updateStats();
+        
         // Gerar novo alvo e frutas
         generateNewTarget();
         placeFoods();
@@ -774,6 +974,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         // Reiniciar timer com velocidade inicial
         gameLoop.setDelay(getGameSpeed());
         gameLoop.start();
+        boardPanel.repaint();
     }
 
     //not needed
@@ -787,8 +988,9 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         paused = !paused;
         if (paused) {
             gameLoop.stop();
-            repaint();
+            showPause();
         } else {
+            hideOverlay();
             gameLoop.start();
         }
     }

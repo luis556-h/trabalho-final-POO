@@ -7,6 +7,7 @@ public class App implements Menu.MenuCallback {
     private int boardHeight = 600;
     private Menu menu;
     private SnakeGame snakeGame;
+    private HowToPlay howToPlay;
     
     public static void main(String[] args) throws Exception {
         SwingUtilities.invokeLater(() -> {
@@ -51,6 +52,19 @@ public class App implements Menu.MenuCallback {
     }
 
     
+    private void showHowToPlay() {
+        if (howToPlay == null) {
+            howToPlay = new HowToPlay(boardWidth, boardHeight, this);
+        }
+        
+        frame.getContentPane().removeAll();
+        frame.add(howToPlay);
+        frame.pack();
+        howToPlay.requestFocus();
+        frame.revalidate();
+        frame.repaint();
+    }
+    
     public void returnToMenu() {
         showMenu();
     }
@@ -58,6 +72,11 @@ public class App implements Menu.MenuCallback {
     @Override
     public void onStartGame() {
         startGame();
+    }
+
+    @Override
+    public void onHowToPlay() {
+        showHowToPlay();
     }
     
     @Override
